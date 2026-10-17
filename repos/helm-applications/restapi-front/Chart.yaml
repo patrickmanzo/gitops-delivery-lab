@@ -1,0 +1,5 @@
+apiVersion: v2
+name: restapi-front
+description: Front React do restapi-flask (estáticos via static-web-server)
+type: application
+version: 0.1.0

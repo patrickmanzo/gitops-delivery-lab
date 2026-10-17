@@ -1,0 +1,156 @@
+# etcd over HTTP on 2381 (listen-metrics-urls in kind-cluster-config), no client certificate
+kubeEtcd:
+  service:
+    port: 2381
+    targetPort: 2381
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+  # grafana.com dashboards; ours live in monitoring/
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: plataforma
+          folder: Plataforma
+          type: file
+          disableDeletion: true
+          options:
+            path: /var/lib/grafana/dashboards/plataforma
+  dashboards:
+    plataforma:
+      traefik:
+        gnetId: 17347
+        revision: 9
+        datasource: Prometheus
+      argocd:
+        gnetId: 14584
+        revision: 1
+        datasource: Prometheus
+      k6:
+        gnetId: 19665
+        revision: 3
+        datasource: Prometheus
+      jenkins:
+        gnetId: 9964
+        revision: 1
+        datasource: Prometheus
+  sidecar:
+    datasources:
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: traceID
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.localhost.com
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki-gateway.loki.svc.cluster.local
+      access: proxy
+      jsonData:
+        derivedFields:
+          - name: trace_id
+            matcherRegex: '"(?:trace_id|TraceId)":\s*"([0-9a-f]{32})"'
+            url: "$${__value.raw}"
+            datasourceUid: tempo
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      url: http://tempo.tempo.svc.cluster.local:3200
+      access: proxy
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-5m"
+          spanEndTimeShift: "5m"
+          filterByTraceID: true
+          customQuery: true
+          query: '{namespace!~"tempo|alloy"} |= "$${__trace.traceId}"'
+        tracesToMetrics:
+          datasourceUid: prometheus
+          spanStartTimeShift: "-5m"
+          spanEndTimeShift: "5m"
+          tags:
+            - key: service.name
+              value: service
+          queries:
+            - name: Requests/s
+              query: sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))
+            - name: Erros/s
+              query: sum(rate(traces_spanmetrics_calls_total{$$__tags,status_code="STATUS_CODE_ERROR"}[5m]))
+            - name: Latência p95
+              query: histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])) by (le))
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+
+# Kyverno PolicyReports as metrics (dashboard in monitoring/kyverno.yaml)
+kube-state-metrics:
+  rbac:
+    extraRules:
+      - apiGroups: ["wgpolicyk8s.io"]
+        resources: ["policyreports"]
+        verbs: ["list", "watch"]
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          - groupVersionKind:
+              group: wgpolicyk8s.io
+              version: v1alpha2
+              kind: PolicyReport
+            metricNamePrefix: kyverno_policyreport
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              resource_kind: [scope, kind]
+              resource_name: [scope, name]
+            metrics:
+              - name: result
+                help: Resultado de cada política no recurso (1 por resultado)
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [results]
+                    labelsFromPath:
+                      policy: [policy]
+                      result: [result]
+                    valueFrom: [scored]
+
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - prometheus.localhost.com
+  prometheusSpec:
+    # 8d covers the 7d SLO window (pyrra/)
+    retention: 8d
+    retentionSize: 4GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # Tempo span metrics/service graph arrive via remote write
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - alertmanager.localhost.com

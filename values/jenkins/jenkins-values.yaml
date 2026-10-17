@@ -1,0 +1,128 @@
+# Everything via JCasC; credentials are Secrets in the jenkins namespace created by Terraform
+controller:
+  admin:
+    existingSecret: jenkins-admin
+  jenkinsUrl: http://jenkins.localhost.com
+  # plugins only on first start: restarts do not depend on the mirror (updates.jenkins.io is flaky).
+  # New plugin: rm /var/jenkins_home/initialization-completed and restart
+  initializeOnce: true
+  testEnabled: false
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+  # false pins old transitive deps and breaks Declarative
+  installLatestPlugins: true
+  installPlugins:
+    - kubernetes:4560.vc25b_83890c34
+    - workflow-aggregator:608.v67378e9d3db_1
+    - git:5.11.0
+    - configuration-as-code:2136.veb_3a_554550b_f
+  additionalPlugins:
+    - job-dsl:3732.v9a_c49a_61a_313
+    - kubernetes-credentials-provider:1.315.v92008589c044
+    - multibranch-scan-webhook-trigger:1.0.11
+    - basic-branch-build-strategies:317.v85b_331d6cc42
+    - pipeline-stage-view:2.41
+    - pipeline-utility-steps:3.810.va_7672d206740
+    - discord-notifier:281.v41a_01a_c2e7dc
+    - dark-theme:652.vea_da_dfea_e769
+    - timestamper:1.30
+    - pipeline-graph-view:1053.v9df19e6ceed2
+    - ansicolor:542.v03d235fee02d
+    - junit:1442.vb_b_a_467df2767
+    - coverage:3.3436.v3f0591159a_dd
+    - sonar:2.19.0
+    - prometheus:860.v532442b_44e9a_
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hostName: jenkins.localhost.com
+
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      security: |
+        security:
+          gitHostKeyVerificationConfiguration:
+            sshHostKeyVerificationStrategy: "acceptFirstConnectionStrategy"
+      appearance: |
+        appearance:
+          themeManager:
+            disableUserThemes: true
+            theme: "dark"
+      timestamper: |
+        unclassified:
+          timestamper:
+            allPipelines: true
+      sonarqube: |
+        unclassified:
+          sonarGlobalConfiguration:
+            buildWrapperEnabled: true
+            installations:
+              - name: sonarqube
+                serverUrl: http://sonarqube.localhost.com
+                credentialsId: sonar-scanner-cli
+      shared-library: |
+        unclassified:
+          globalLibraries:
+            libraries:
+              - name: jenkins-shared-libraries
+                defaultVersion: main
+                implicit: false
+                retriever:
+                  modernSCM:
+                    scm:
+                      gitSource:
+                        remote: git@gitea.localhost.com:patrickmanzo/jenkins-shared-libraries.git
+                        credentialsId: jenkins-gitea
+      jobs: |
+        jobs:
+          - script: >
+              ['restapi-flask', 'restapi-front'].each { app ->
+                multibranchPipelineJob(app) {
+                  branchSources {
+                    branchSource {
+                      source {
+                        git {
+                          id(app)
+                          // concatenation: JCasC would interpolate the variable syntax into an empty string
+                          remote('git@gitea.localhost.com:patrickmanzo/' + app + '.git')
+                          credentialsId('jenkins-gitea')
+                          traits {
+                            gitBranchDiscovery()
+                            gitTagDiscovery()
+                          }
+                        }
+                      }
+                      // v* tags build too (prd deploy); by default Jenkins only discovers tags
+                      buildStrategies {
+                        buildRegularBranches()
+                        buildTags {
+                          atLeastDays('-1')
+                          atMostDays('3')
+                        }
+                      }
+                    }
+                  }
+                  // Gitea webhook -> http://jenkins.jenkins.svc.cluster.local:8080/multibranch-webhook-trigger/invoke?token=<app>
+                  configure { node ->
+                    node / triggers << 'com.igalg.jenkins.plugins.mswt.trigger.ComputedFolderWebHookTrigger' {
+                      spec('')
+                      token(app)
+                    }
+                  }
+                }
+              }
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+rbac:
+  readSecrets: true

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "restapi-front.fullname" . }}
+  labels: {{- include "restapi-front.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector: {{- include "restapi-front.selectorLabels" . | nindent 4 }}

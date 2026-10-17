@@ -1,0 +1,98 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  labels: {{ include "restapi-flask.labels" . | nindent 4 }}
+  name: {{ include "restapi-flask.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ include "restapi-flask.fullname" . }}
+  progressDeadlineSeconds: 300
+  progressDeadlineAbort: true
+  strategy:
+    # replica-based canary; fine-grained weights would need TraefikService + trafficRouting.traefik
+    canary:
+      steps:
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: {{ include "restapi-flask.fullname" . }}-canary
+            args:
+              - name: version
+                value: {{ .Values.image.tag | default "latest" | quote }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # environment kept out of the selector (immutable)
+      labels:
+        app: {{ include "restapi-flask.fullname" . }}
+        {{- with .Values.environment }}
+        environment: {{ . }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "restapi-flask.fullname" . }}
+      automountServiceAccountToken: false
+      # hash: stable and canary spread independently of each other's pods
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: {{ include "restapi-flask.fullname" . }}
+          matchLabelKeys:
+            - rollouts-pod-template-hash
+      # preStop (5s) + gunicorn graceful-timeout (20s) fit in 30s
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - image: {{ .Values.image.registry | default "restapi-flask" }}:{{ .Values.image.tag | default "latest" }}
+        name: api
+        resources: {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        # wait for Traefik to drop the pod from endpoints before shutting down (no 5xx on rollout)
+        lifecycle:
+          preStop:
+            sleep:
+              seconds: 5
+        env:
+        - name: ENVIRONMENT
+          value: {{ .Values.environment | default "unknown" | quote }}
+        - name: APP_VERSION
+          value: {{ .Values.image.tag | default "latest" | quote }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.otlpEndpoint | default "http://alloy.alloy.svc.cluster.local:4318" | quote }}
+        - name: OTEL_SEMCONV_STABILITY_OPT_IN
+          value: http
+        {{- with .Values.environmentVariables }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.environmentVariablesFrom }}
+        envFrom:
+        {{- toYaml .Values.environmentVariablesFrom | nindent 8 }}
+        {{- end }}
+        # gunicorn binds the port ~2s after start
+        startupProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.appPort | default 5000 }}
+          initialDelaySeconds: 3
+          periodSeconds: 2
+          failureThreshold: 30
+        # liveness does not depend on MongoDB: a database outage does not restart pods
+        livenessProbe:
+          {{- .Values.livenessProbe | default (dict "httpGet" (dict "path" "/health" "port" (.Values.appPort | default 5000)) "periodSeconds" 10 "failureThreshold" 3) | toYaml | nindent 10 }}
+        readinessProbe:
+          {{- .Values.readinessProbe | default (dict "httpGet" (dict "path" "/ready" "port" (.Values.appPort | default 5000)) "periodSeconds" 5 "failureThreshold" 2 "timeoutSeconds" 3) | toYaml | nindent 10 }}

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: platform-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-rollouts
+      targetRevision: "2.43.8"
+      helm:
+        releaseName: argo-rollouts
+        valueFiles:
+          - $values/values/argo-rollouts/argo-rollouts-values.yaml
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      ref: values
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

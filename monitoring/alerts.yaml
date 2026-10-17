@@ -1,0 +1,40 @@
+# "null" receiver: alerts visible in Alertmanager/Grafana, no notifications
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: restapi-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: restapi
+      rules:
+        - alert: MongoDBDown
+          expr: mongodb_up == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: MongoDB fora em {{ $labels.namespace }}
+            description: O exporter não consegue falar com o mongod; a API do ambiente responde 503 em /ready e /users.
+            dashboard_url: http://grafana.localhost.com/d/restapi-mongodb?var-env={{ $labels.namespace }}
+    - name: loadgen
+      rules:
+        - alert: LoadgenDown
+          expr: absent_over_time(k6_http_reqs_total{testid="loadgen-dev"}[10m])
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Gerador de tráfego k6 de dev parado
+            description: Sem métricas do k6-dev há 10 min. Ver kubectl -n loadgen get pods.
+        # intentional 400s count as expected
+        - alert: LoadgenRequestsFailing
+          expr: |
+            sum(rate(k6_http_reqs_total{testid="loadgen-dev", expected_response="false"}[5m]))
+              / sum(rate(k6_http_reqs_total{testid="loadgen-dev"}[5m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Mais de 5% das requisições do k6 falhando em dev
+            dashboard_url: http://grafana.localhost.com/d/restapi-red?var-env=dev

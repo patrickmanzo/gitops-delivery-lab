@@ -1,0 +1,10 @@
+@Library('jenkins-shared-libraries')_
+
+gitflowPipeline {
+  language = 'node'
+  // version in config.json; /api/health proves the /api -> restapi-flask routing
+  versionPath = '/config.json'
+  smokePaths = ['/', '/api/health']
+  // below this the build is unstable (flask uses the default, 80)
+  minCoverage = 70
+}

@@ -1,0 +1,63 @@
+# The <app>-<env> name is used by argocdWait/DORA in the pipeline
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: restapi
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - app: restapi-flask
+                  release: flask
+                - app: restapi-front
+                  release: front
+          - list:
+              elements:
+                - env: dev
+                - env: stg
+                - env: prd
+  template:
+    metadata:
+      name: "{{ .app }}-{{ .env }}"
+    spec:
+      project: application-project
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .env }}"
+      source:
+        repoURL: ssh://git@gitea.localhost.com/patrickmanzo/helm-applications.git
+        targetRevision: main
+        path: "{{ .app }}"
+        helm:
+          releaseName: "{{ .release }}"
+          valueFiles:
+            - "values-{{ .env }}.yaml"
+      # Rollout replicas are owned by the HPA
+      ignoreDifferences:
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/replicas
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # retries take the newest revision: a rejected sync (e.g. the seed image
+        # denied by Kyverno on a new lab) does not hold back the next deploy
+        retry:
+          limit: 5
+          refresh: true
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+        syncOptions:
+          - CreateNamespace=true
+          # removed resources go only after the rest is Healthy (kind change without a gap)
+          - PruneLast=true
+          - RespectIgnoreDifferences=true

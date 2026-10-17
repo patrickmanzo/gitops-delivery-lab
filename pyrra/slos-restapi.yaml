@@ -1,0 +1,53 @@
+# 7d window (production: 28d/30d): anything shorter makes Pyrra generate rate[1s].
+apiVersion: pyrra.dev/v1alpha1
+kind: ServiceLevelObjective
+metadata:
+  name: restapi-flask-disponibilidade
+  namespace: monitoring
+spec:
+  description: Requisições à API sem erro de servidor (5xx). 4xx é erro do cliente e não gasta o orçamento.
+  target: "99.5"
+  window: 7d
+  indicator:
+    ratio:
+      errors:
+        metric: restapi:traefik_requests_5xx:total{exported_service=~"(dev|stg|prd)-flask-restapi-flask-5000@kubernetes"}
+      total:
+        metric: traefik_service_requests_total{exported_service=~"(dev|stg|prd)-flask-restapi-flask-5000@kubernetes"}
+      grouping:
+        - exported_service
+---
+apiVersion: pyrra.dev/v1alpha1
+kind: ServiceLevelObjective
+metadata:
+  name: restapi-flask-latencia
+  namespace: monitoring
+spec:
+  description: Requisições à API respondidas em até 300ms (bucket le="0.3" do Traefik).
+  target: "99"
+  window: 7d
+  indicator:
+    latency:
+      success:
+        metric: traefik_service_request_duration_seconds_bucket{exported_service=~"(dev|stg|prd)-flask-restapi-flask-5000@kubernetes", le="0.3"}
+      total:
+        metric: traefik_service_request_duration_seconds_count{exported_service=~"(dev|stg|prd)-flask-restapi-flask-5000@kubernetes"}
+      grouping:
+        - exported_service
+---
+# Traefik only creates the code="5xx" series on the first error; this one is 0 until then.
+# Sums counters before rate: a Traefik restart causes a false spike for a few minutes.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: restapi-slo-inputs
+  namespace: monitoring
+spec:
+  groups:
+    - name: restapi-slo-inputs
+      rules:
+        - record: restapi:traefik_requests_5xx:total
+          expr: |
+            sum by (exported_service) (traefik_service_requests_total{exported_service=~".*-flask-restapi-flask-5000@kubernetes", code=~"5.."})
+              or
+            sum by (exported_service) (traefik_service_requests_total{exported_service=~".*-flask-restapi-flask-5000@kubernetes"}) * 0

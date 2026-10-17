@@ -1,0 +1,71 @@
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik
+
+providers:
+  kubernetesCRD:
+    allowCrossNamespace: true
+
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+    # spans only on routes annotated router.observability.tracing
+    observability:
+      tracing: false
+  websecure:
+    port: 8443
+    exposedPort: 443
+  # Gitea Git over SSH
+  ssh:
+    port: 2222
+    exposedPort: 22
+    protocol: TCP
+    expose:
+      default: true
+
+service:
+  type: LoadBalancer
+  annotations:
+    metallb.io/loadBalancerIPs: 172.18.0.50
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.localhost.com`)
+    entryPoints: ["web"]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+log:
+  format: json
+
+accessLog:
+  enabled: true
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        X-Request-Id: keep
+        Traceparent: keep
+        User-Agent: keep
+        Authorization: redact
+
+tracing:
+  serviceName: traefik
+  otlp:
+    enabled: true
+    http:
+      enabled: true
+      endpoint: http://alloy.alloy.svc.cluster.local:4318/v1/traces
+
+metrics:
+  prometheus:
+    addRoutersLabels: true
+    service:
+      enabled: true

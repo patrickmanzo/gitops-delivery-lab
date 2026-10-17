@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: traefik-project
+  namespace: argocd
+spec:
+  description: Projeto Argo CD para Traefik
+  sourceRepos:
+    - 'https://traefik.github.io/charts'
+    - 'https://github.com/patrickmanzo/gitops-delivery-lab.git'
+  destinations:
+    - namespace: traefik
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

@@ -1,0 +1,105 @@
+# Containers only (not initContainers/ephemeral).
+# failurePolicy Ignore: Kyverno being down does not block cluster recreation.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/description: "Containers precisam de requests (cpu, memória) e limite de memória. Sem limite de CPU de propósito (throttling)."
+spec:
+  validationActions: [Deny]
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [dev, stg, prd]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c, has(c.resources) && has(c.resources.requests) && 'cpu' in c.resources.requests && 'memory' in c.resources.requests && has(c.resources.limits) && 'memory' in c.resources.limits)
+      messageExpression: >-
+        'Containers sem requests cpu/memória ou limite de memória: ' + object.spec.containers.filter(c, !(has(c.resources) && has(c.resources.requests) && 'cpu' in c.resources.requests && 'memory' in c.resources.requests && has(c.resources.limits) && 'memory' in c.resources.limits)).map(c, c.name).join(', ')
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/description: "Imagem com tag fixa (ou digest): latest/sem tag muda sem deploy e quebra rollback."
+spec:
+  validationActions: [Deny]
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [dev, stg, prd]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c, c.image.matches('@sha256:[a-f0-9]{64}$') || (c.image.matches(':[^:/]+$') && !c.image.endsWith(':latest')))
+      messageExpression: >-
+        'Imagem sem tag fixa: ' + object.spec.containers.filter(c, !(c.image.matches('@sha256:[a-f0-9]{64}$') || (c.image.matches(':[^:/]+$') && !c.image.endsWith(':latest')))).map(c, c.image).join(', ')
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-registries
+  annotations:
+    policies.kyverno.io/description: "Imagens só do Harbor do lab (apps) ou do bitnamilegacy (MongoDB)."
+spec:
+  validationActions: [Deny]
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [dev, stg, prd]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c, c.image.startsWith('harbor.localhost.com/patrickmanzo/') || c.image.startsWith('docker.io/bitnamilegacy/'))
+      messageExpression: >-
+        'Registry não permitido: ' + object.spec.containers.filter(c, !(c.image.startsWith('harbor.localhost.com/patrickmanzo/') || c.image.startsWith('docker.io/bitnamilegacy/'))).map(c, c.image).join(', ')
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-run-as-non-root
+  annotations:
+    policies.kyverno.io/description: "Pod ou todos os containers com runAsNonRoot: true."
+spec:
+  validationActions: [Deny]
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [dev, stg, prd]
+  validations:
+    - expression: >-
+        (has(object.spec.securityContext) && has(object.spec.securityContext.runAsNonRoot) && object.spec.securityContext.runAsNonRoot) || object.spec.containers.all(c, has(c.securityContext) && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot)
+      messageExpression: >-
+        'Pod pode rodar como root: defina securityContext.runAsNonRoot: true'

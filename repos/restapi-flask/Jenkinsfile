@@ -1,0 +1,7 @@
+@Library('jenkins-shared-libraries')_
+
+gitflowPipeline {
+  language = 'python'
+  // /version (default) checks the tag; /users proves the MongoDB connection
+  smokePaths = ['/health', '/users']
+}

@@ -1,0 +1,28 @@
+# embedded H2 database (no Postgres)
+community:
+  enabled: true
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - name: sonarqube.localhost.com
+
+# chart Job changes admin/admin to the OpenBao password (no forced change on first login)
+setAdminPassword:
+  passwordSecretName: sonarqube-admin
+
+monitoringPasscodeSecretName: sonarqube-admin
+monitoringPasscodeSecretKey: monitoringPasscode
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 2Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi

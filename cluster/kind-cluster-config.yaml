@@ -1,0 +1,38 @@
+# __ROOT__ is replaced by the Makefile (extraMounts needs an absolute path)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts: &mounts
+      - hostPath: __ROOT__/cluster/kubelet-resolv.conf
+        containerPath: /etc/kubelet-resolv.conf
+        readOnly: true
+  - role: worker
+    extraMounts: *mounts
+  - role: worker
+    extraMounts: *mounts
+kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    resolvConf: /etc/kubelet-resolv.conf
+  # control plane metrics bound beyond 127.0.0.1 for Prometheus
+  - |
+    kind: ClusterConfiguration
+    controllerManager:
+      extraArgs:
+        bind-address: 0.0.0.0
+    scheduler:
+      extraArgs:
+        bind-address: 0.0.0.0
+    etcd:
+      local:
+        extraArgs:
+          listen-metrics-urls: http://0.0.0.0:2381
+  - |
+    kind: KubeProxyConfiguration
+    metricsBindAddress: 0.0.0.0:10249
+# containerd reads /etc/containerd/certs.d/<registry>/hosts.toml (Harbor over HTTP)
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"

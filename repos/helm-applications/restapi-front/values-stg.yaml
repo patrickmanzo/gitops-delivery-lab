@@ -1,0 +1,22 @@
+environment: stg
+
+replicaCount: 1
+
+image:
+  registry: harbor.localhost.com/patrickmanzo/restapi-front
+  tag: v0.1.0-22c5db9b54
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+api:
+  service: flask-restapi-flask
+  port: 5000
+
+ingress:
+  enabled: true
+  host: app-stg.localhost.com

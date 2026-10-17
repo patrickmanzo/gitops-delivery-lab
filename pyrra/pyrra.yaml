@@ -1,0 +1,281 @@
+# Pyrra v0.10.2: manifestos oficiais (examples/kubernetes/manifests) com
+# imagem v0.10.2 (o exemplo da tag ainda aponta v0.9.0), Prometheus do kube-prometheus-stack,
+# requests/limits e Ingress. "kubernetes" lê os ServiceLevelObjective e gera PrometheusRule; "api" é a UI.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/name: pyrra
+  name: pyrra-api
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/name: pyrra
+  name: pyrra-api
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      app.kubernetes.io/name: pyrra
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: api
+        app.kubernetes.io/name: pyrra
+    spec:
+      containers:
+      - args:
+        - api
+        - --api-url=http://pyrra-kubernetes.monitoring.svc.cluster.local:9444
+        - --prometheus-url=http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+        image: ghcr.io/pyrra-dev/pyrra:v0.10.2
+        name: pyrra
+        ports:
+        - containerPort: 9099
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: pyrra-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/name: pyrra
+  name: pyrra-api
+  namespace: monitoring
+spec:
+  ports:
+  - name: http
+    port: 9099
+    targetPort: 9099
+  selector:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/name: pyrra
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/name: pyrra
+  name: pyrra-api
+  namespace: monitoring
+spec:
+  endpoints:
+  - port: http
+  namespaceSelector:
+    matchNames:
+    - monitoring
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      app.kubernetes.io/name: pyrra
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+rules:
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheusrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheusrules/status
+  verbs:
+  - get
+- apiGroups:
+  - pyrra.dev
+  resources:
+  - servicelevelobjectives
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - pyrra.dev
+  resources:
+  - servicelevelobjectives/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - pyrra.dev
+  resources:
+  - servicelevelobjectives/finalizers
+  verbs:
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pyrra-kubernetes
+subjects:
+- kind: ServiceAccount
+  name: pyrra-kubernetes
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: kubernetes
+      app.kubernetes.io/name: pyrra
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: kubernetes
+        app.kubernetes.io/name: pyrra
+    spec:
+      containers:
+      - args:
+        - kubernetes
+        image: ghcr.io/pyrra-dev/pyrra:v0.10.2
+        name: pyrra
+        ports:
+        - containerPort: 9099
+          name: http
+        - containerPort: 9443
+          name: webhooks
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: pyrra-kubernetes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  - name: http
+    port: 9444
+    targetPort: 9444
+  - name: webhooks
+    port: 9443
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes
+    app.kubernetes.io/name: pyrra
+  name: pyrra-kubernetes
+  namespace: monitoring
+spec:
+  endpoints:
+  - port: metrics
+  namespaceSelector:
+    matchNames:
+    - monitoring
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: kubernetes
+      app.kubernetes.io/name: pyrra
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pyrra
+  namespace: monitoring
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: pyrra.localhost.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pyrra-api
+            port:
+              number: 9099

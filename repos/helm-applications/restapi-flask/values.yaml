@@ -1,0 +1,42 @@
+canary:
+  prometheus: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+  maxErrorRate: 0.05
+  maxLatencyP95: 0.3
+podAnnotations: {}
+# k6 in dev uses ~30m/pod (60% of the request): scales only on real peaks
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilization: 80
+resources:
+  requests:
+    cpu: 50m
+    memory: 160Mi
+  limits:
+    memory: 384Mi
+mongodb:
+  serviceAccount:
+    automountServiceAccountToken: false
+  auth:
+    existingSecret: restapi-flask-mongodb-auth
+  # WiredTiger sizes its cache from host RAM, not the container limit
+  extraFlags:
+    - --wiredTigerCacheSizeGB=0.25
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 768Mi
+  metrics:
+    enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+  # locked RWO volume: the old pod must stop before the new one starts
+  updateStrategy:
+    type: Recreate

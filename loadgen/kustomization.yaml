@@ -1,0 +1,8 @@
+namespace: loadgen
+resources:
+  - k6.yaml
+configMapGenerator:
+  # hashed name: changing the script restarts the pods
+  - name: k6-script
+    files:
+      - script.js

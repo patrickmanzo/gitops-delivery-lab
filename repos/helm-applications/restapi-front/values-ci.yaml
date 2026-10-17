@@ -1,0 +1,22 @@
+environment: ci
+
+replicaCount: 1
+
+image:
+  registry: harbor.localhost.com/patrickmanzo/restapi-front
+  tag: latest
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+api:
+  service: flask-restapi-flask
+  port: 5000
+
+ingress:
+  enabled: false
+  host: app-ci.localhost.com

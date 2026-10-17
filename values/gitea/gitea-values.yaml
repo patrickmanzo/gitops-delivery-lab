@@ -1,0 +1,73 @@
+# SQLite + in-memory cache (no postgres-ha/valkey)
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: gitea.localhost.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+# RWO volume with a leveldb lock: a rolling update cannot start the new pod
+strategy:
+  type: Recreate
+  rollingUpdate: null
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+gitea:
+  admin:
+    existingSecret: gitea-admin
+    email: gitea@localhost.com
+    passwordMode: keepUpdated
+  config:
+    server:
+      DOMAIN: gitea.localhost.com
+      ROOT_URL: http://gitea.localhost.com/
+      SSH_DOMAIN: gitea.localhost.com
+      SSH_PORT: 22
+      SSH_LISTEN_PORT: 2222
+    database:
+      DB_TYPE: sqlite3
+    session:
+      PROVIDER: memory
+    cache:
+      ADAPTER: memory
+    queue:
+      TYPE: level
+    service:
+      DISABLE_REGISTRATION: true
+    webhook:
+      ALLOWED_HOST_LIST: "*"
+      SKIP_TLS_VERIFY: true
+
+postgresql-ha:
+  enabled: false
+postgresql:
+  enabled: false
+valkey-cluster:
+  enabled: false
+valkey:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+extraDeploy:
+  # git@gitea.localhost.com:org/repo.git -> Traefik :22 -> gitea-ssh
+  - apiVersion: traefik.io/v1alpha1
+    kind: IngressRouteTCP
+    metadata:
+      name: gitea-ssh
+    spec:
+      entryPoints:
+        - ssh
+      routes:
+        - match: HostSNI(`*`)
+          services:
+            - name: gitea-ssh
+              port: 22

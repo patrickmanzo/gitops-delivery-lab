@@ -1,0 +1,39 @@
+# *.localhost.com hosts and HTTP Harbor in the nodes' containerd; reapplied after restarts
+# (docker regenera /etc/hosts)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: setup-hosts
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: setup-hosts
+  template:
+    metadata:
+      labels:
+        name: setup-hosts
+    spec:
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: setup-hosts
+          image: busybox:1.37
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              grep -q harbor.localhost.com /host/etc/hosts || echo '172.18.0.50 gitea.localhost.com harbor.localhost.com jenkins.localhost.com sonarqube.localhost.com argocd.localhost.com' >> /host/etc/hosts
+              mkdir -p /host/etc/containerd/certs.d/harbor.localhost.com
+              printf 'server = "http://harbor.localhost.com"\n\n[host."http://harbor.localhost.com"]\n  capabilities = ["pull", "resolve", "push"]\n  skip_verify = true\n' > /host/etc/containerd/certs.d/harbor.localhost.com/hosts.toml
+          volumeMounts:
+            - name: etc
+              mountPath: /host/etc
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+      volumes:
+        - name: etc
+          hostPath:
+            path: /etc

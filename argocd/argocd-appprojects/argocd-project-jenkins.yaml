@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: jenkins-project
+  namespace: argocd
+spec:
+  description: Projeto Argo CD para Jenkins
+  sourceRepos:
+    - 'https://charts.jenkins.io'
+    - 'https://github.com/patrickmanzo/gitops-delivery-lab.git'
+  destinations:
+    - namespace: jenkins
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

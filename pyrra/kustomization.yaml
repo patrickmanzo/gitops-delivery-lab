@@ -1,0 +1,5 @@
+namespace: monitoring
+resources:
+  - crd.yaml
+  - pyrra.yaml
+  - slos-restapi.yaml

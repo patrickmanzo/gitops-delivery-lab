@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-application
+  namespace: argocd
+  annotations:
+    # after kube-prometheus-stack (wave 2): the chart ships ServiceMonitors
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  sources:
+    - repoURL: https://kyverno.github.io/kyverno/
+      chart: kyverno
+      targetRevision: "3.9.1"
+      helm:
+        releaseName: kyverno
+        valueFiles:
+          - $values/values/kyverno/kyverno-values.yaml
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      path: policies
+  # CRDs ship empty labels/annotations {}: the API server drops them and Argo would show OutOfSync
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+      # large CRDs (last-applied annotation exceeds the limit) and policies in the same sync as the CRDs
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - RespectIgnoreDifferences=true

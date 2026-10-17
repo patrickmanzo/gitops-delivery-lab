@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: monitoring-project
+  namespace: argocd
+spec:
+  description: Projeto Argo CD para monitoramento (Prometheus, Grafana, Loki, Alloy).
+  sourceRepos:
+    - 'https://prometheus-community.github.io/helm-charts'
+    - 'https://grafana.github.io/helm-charts'
+    - 'https://grafana-community.github.io/helm-charts'
+    - 'https://github.com/patrickmanzo/gitops-delivery-lab.git'
+  destinations:
+    - namespace: monitoring
+      server: 'https://kubernetes.default.svc'
+    - namespace: kube-system
+      server: 'https://kubernetes.default.svc'
+    - namespace: loki
+      server: 'https://kubernetes.default.svc'
+    - namespace: alloy
+      server: 'https://kubernetes.default.svc'
+    - namespace: tempo
+      server: 'https://kubernetes.default.svc'
+    - namespace: loadgen
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

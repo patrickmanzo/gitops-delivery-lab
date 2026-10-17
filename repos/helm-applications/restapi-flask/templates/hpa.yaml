@@ -1,0 +1,25 @@
+{{- if .Values.autoscaling.enabled }}
+# replicaCount is only the initial value (Argo ignores the Rollout /spec/replicas)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "restapi-flask.fullname" . }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: {{ include "restapi-flask.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilization }}
+  behavior:
+    # a new pod's startup CPU spike does not cascade into more scaling
+    scaleUp:
+      stabilizationWindowSeconds: 60
+{{- end }}

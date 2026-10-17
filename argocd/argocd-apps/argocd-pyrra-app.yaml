@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pyrra-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: monitoring-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  source:
+    repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+    targetRevision: main
+    path: pyrra
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # CRD and SLOs in the same sync
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true

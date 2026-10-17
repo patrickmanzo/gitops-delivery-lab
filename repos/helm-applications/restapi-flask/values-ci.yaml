@@ -1,0 +1,42 @@
+environment: ci
+
+fullnameOverride: flask
+
+replicaCount: 1
+
+appPort: 5000
+
+image:
+  registry: harbor.localhost.com/patrickmanzo/restapi-flask
+  tag: latest
+
+environmentVariables:
+  - name: MONGODB_DB
+    value: api
+  - name: MONGODB_HOST
+    value: restapi-flask-ci-mongodb
+  - name: MONGODB_USERNAME
+    value: api
+  - name: MONGODB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: restapi-flask-mongodb-auth
+        key: mongodb-passwords
+
+livenessProbe: {}
+
+readinessProbe: {}
+
+ingress:
+  enabled: false
+  host: api-ci.localhost.com
+
+mongodb:
+  auth:
+    usernames:
+      - api
+    databases:
+      - api
+
+autoscaling:
+  enabled: false

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loadgen-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: monitoring-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loadgen
+  source:
+    repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+    targetRevision: main
+    path: loadgen
+  # k6-stg liga/desliga por make traffic-on/off
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: k6-stg
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true

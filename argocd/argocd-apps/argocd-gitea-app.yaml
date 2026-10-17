@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: gitea-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
+  sources:
+    - repoURL: https://dl.gitea.com/charts
+      chart: gitea
+      targetRevision: "12.7.0"
+      helm:
+        releaseName: gitea
+        valueFiles:
+          - $values/values/gitea/gitea-values.yaml
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      path: secrets/gitea
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates
+        - /spec/persistentVolumeClaimRetentionPolicy

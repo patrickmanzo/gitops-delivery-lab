@@ -1,0 +1,37 @@
+environment: stg
+
+replicaCount: 2
+
+appPort: 5000
+
+image:
+  registry: harbor.localhost.com/patrickmanzo/restapi-flask
+  tag: v0.4.0-ee393d7bd4
+
+environmentVariables:
+  - name: MONGODB_DB
+    value: api
+  - name: MONGODB_HOST
+    value: flask-mongodb
+  - name: MONGODB_USERNAME
+    value: api
+  - name: MONGODB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: restapi-flask-mongodb-auth
+        key: mongodb-passwords
+
+livenessProbe: {}
+
+readinessProbe: {}
+
+ingress:
+  enabled: true
+  host: api-stg.localhost.com
+
+mongodb:
+  auth:
+    usernames:
+      - api
+    databases:
+      - api

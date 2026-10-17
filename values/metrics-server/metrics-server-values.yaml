@@ -1,0 +1,9 @@
+# kind: the kubelet certificate is self-signed (no SAN for the node IP)
+args:
+  - --kubelet-insecure-tls
+resources:
+  requests:
+    cpu: 20m
+    memory: 48Mi
+  limits:
+    memory: 128Mi

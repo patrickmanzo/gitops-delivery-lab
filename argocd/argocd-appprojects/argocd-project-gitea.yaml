@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitea-project
+  namespace: argocd
+spec:
+  description: Projeto Argo CD para Gitea
+  sourceRepos:
+    - 'https://dl.gitea.com/charts'
+    - 'https://github.com/patrickmanzo/gitops-delivery-lab.git'
+  destinations:
+    - namespace: gitea
+      server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

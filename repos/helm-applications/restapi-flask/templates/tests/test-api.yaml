@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "restapi-flask.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test
+    image: busybox:1.37
+    command: ["wget", "-qO-", "http://{{ include "restapi-flask.fullname" . }}:{{ .Values.appPort | default 5000 }}/users"]

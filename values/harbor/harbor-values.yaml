@@ -1,0 +1,42 @@
+# HTTP: containerd e kaniko usam como registry inseguro
+expose:
+  type: ingress
+  tls:
+    enabled: false
+  ingress:
+    hosts:
+      core: harbor.localhost.com
+    className: traefik
+    annotations: {}
+
+externalURL: http://harbor.localhost.com
+
+existingSecretAdminPassword: harbor-admin
+
+persistence:
+  enabled: true
+  persistentVolumeClaim:
+    registry:
+      size: 10Gi
+    jobservice:
+      jobLog:
+        size: 1Gi
+    database:
+      size: 2Gi
+    redis:
+      size: 1Gi
+    trivy:
+      size: 5Gi
+
+# internal secrets and token key: created once per cluster by `make harbor-secrets`
+# (the chart renders random ones on every Argo sync, restarting core/jobservice)
+core:
+  existingSecret: harbor-internal
+  existingXsrfSecret: harbor-internal
+  secretName: harbor-token
+jobservice:
+  existingSecret: harbor-internal
+registry:
+  existingSecret: harbor-internal
+  credentials:
+    htpasswdString: "harbor_registry_user:$2a$05$9oeysbCPLYBCA8hFFMc.3ez4FQtQAVf4jyOBa69489eJHHcekH6u."

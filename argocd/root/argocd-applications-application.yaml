@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-applications
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: "https://github.com/patrickmanzo/gitops-delivery-lab.git"
+    targetRevision: "main"
+    path: "argocd/applications" # pipeline apps (separate root: Degraded until an image exists does not block the platform)
+    directory:
+      recurse: true # Lê subpastas
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: "argocd"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: "30s"  # Tempo entre tentativas
+        factor: 2
+        maxDuration: "300s"
+    syncOptions:
+      - CreateNamespace=true

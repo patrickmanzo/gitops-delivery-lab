@@ -1,0 +1,22 @@
+environment: dev
+
+replicaCount: 1
+
+image:
+  registry: harbor.localhost.com/patrickmanzo/restapi-front
+  tag: dev-848d8370cb
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+api:
+  service: flask-restapi-flask
+  port: 5000
+
+ingress:
+  enabled: true
+  host: app-dev.localhost.com

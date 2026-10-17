@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: platform-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openbao
+  sources:
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: "0.30.4"
+      helm:
+        releaseName: openbao
+        valueFiles:
+          - $values/values/openbao/openbao-values.yaml
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      path: secrets/openbao
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

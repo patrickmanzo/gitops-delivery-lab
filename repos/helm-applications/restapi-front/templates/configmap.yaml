@@ -1,0 +1,9 @@
+# /config.json: same image in every environment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "restapi-front.fullname" . }}
+  labels: {{- include "restapi-front.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {{- dict "environment" .Values.environment "version" .Values.image.tag | toJson | nindent 4 }}

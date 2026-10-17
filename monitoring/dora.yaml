@@ -1,0 +1,493 @@
+# Painel DORA: eventos de deploy que o pipeline grava no Loki (vars/doraEvent.groovy na shared lib)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-dora
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  dora.json: |
+    {
+      "uid": "dora",
+      "title": "DORA: entrega de software",
+      "tags": [
+        "dora",
+        "cicd"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 41,
+      "refresh": "1m",
+      "time": {
+        "from": "now-7d",
+        "to": "now"
+      },
+      "description": "Eventos do pipeline (shared lib doraEvent) no Loki: um por deploy confirmado ou revertido.",
+      "templating": {
+        "list": [
+          {
+            "name": "app",
+            "label": "App",
+            "type": "query",
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "query": {
+              "label": "app",
+              "stream": "{source=\"cicd\"}",
+              "type": 1,
+              "refId": "app"
+            },
+            "includeAll": true,
+            "allValue": ".+",
+            "multi": true,
+            "refresh": 2,
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            }
+          },
+          {
+            "name": "env",
+            "label": "Ambiente",
+            "type": "custom",
+            "query": "dev,stg,prd",
+            "current": {
+              "text": "dev",
+              "value": "dev"
+            },
+            "options": [
+              {
+                "text": "dev",
+                "value": "dev",
+                "selected": true
+              },
+              {
+                "text": "stg",
+                "value": "stg",
+                "selected": false
+              },
+              {
+                "text": "prd",
+                "value": "prd",
+                "selected": false
+              }
+            ]
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Frequência de deploy (por dia)",
+          "description": "Deploys bem-sucedidos por dia no período. Elite: vários por dia (≥1/dia).",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 6,
+            "h": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 2,
+              "noValue": "sem dados",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.03333333333333333
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.14285714285714285
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "color": {
+                "mode": "thresholds"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "sum(count_over_time({source=\"cicd\", app=~\"$app\", environment=\"$env\"} | json | result=\"success\" [$__range])) / ($__range_s / 86400)",
+              "queryType": "instant"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Lead time (mediana)",
+          "description": "Do commit deployado até o deploy confirmado no ar (smoke test). Elite: menos de 1 dia.",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 0,
+            "w": 6,
+            "h": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 1,
+              "noValue": "sem dados",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 86400
+                  },
+                  {
+                    "color": "orange",
+                    "value": 604800
+                  },
+                  {
+                    "color": "red",
+                    "value": 2592000
+                  }
+                ]
+              },
+              "color": {
+                "mode": "thresholds"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "quantile_over_time(0.5, {source=\"cicd\", app=~\"$app\", environment=\"$env\"} | json | result=\"success\" | unwrap lead_time_seconds [$__range]) by (environment)",
+              "queryType": "instant"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Taxa de falha de mudança",
+          "description": "Deploys revertidos (rollback automático) / total de deploys. Elite: até 15%.",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 6,
+            "h": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 1,
+              "noValue": "sem dados",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.15
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.3
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.45
+                  }
+                ]
+              },
+              "color": {
+                "mode": "thresholds"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "(sum(count_over_time({source=\"cicd\", app=~\"$app\", environment=\"$env\"} | json | result=\"failure\" [$__range])) or vector(0)) / sum(count_over_time({source=\"cicd\", app=~\"$app\", environment=\"$env\"} | json [$__range]))",
+              "queryType": "instant"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Tempo de restauração (médio)",
+          "description": "Da primeira falha até o próximo deploy bem-sucedido do mesmo app/ambiente. Elite: menos de 1 hora.",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 0,
+            "w": 6,
+            "h": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 1,
+              "noValue": "sem dados",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 3600
+                  },
+                  {
+                    "color": "orange",
+                    "value": 86400
+                  },
+                  {
+                    "color": "red",
+                    "value": 604800
+                  }
+                ]
+              },
+              "color": {
+                "mode": "thresholds"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "avg_over_time({source=\"cicd\", app=~\"$app\", environment=\"$env\"} | json | restore_seconds != \"\" | unwrap restore_seconds [$__range]) by (environment)",
+              "queryType": "instant"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Deploys por dia (sucesso e falha)",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 5,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "sum by (environment, result) (count_over_time({source=\"cicd\", app=~\"$app\"} | json [1d]))",
+              "queryType": "range",
+              "legendFormat": "{{environment}} {{result}}",
+              "step": "1d"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Lead time por ambiente (mediana diária)",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 5,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "showPoints": "always",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "quantile_over_time(0.5, {source=\"cicd\", app=~\"$app\"} | json | result=\"success\" | unwrap lead_time_seconds [1d]) by (environment)",
+              "queryType": "range",
+              "legendFormat": "{{environment}}",
+              "step": "1d"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "logs",
+          "title": "Eventos de deploy",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 13,
+            "w": 24,
+            "h": 10
+          },
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending",
+            "enableLogDetails": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "{source=\"cicd\", app=~\"$app\"} | json | line_format \"{{.app}} → {{.environment}}  {{.result}}  {{.tag}}  lead {{.lead_time_seconds}}s{{if .restore_seconds}}  restaurado em {{.restore_seconds}}s{{end}}  {{.build}}\""
+            }
+          ]
+        }
+      ]
+    }

@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins-ci
+  containers:
+  - name: python
+    image: python:3.15-alpine
+    command:
+    - sleep
+    args:
+    - infinity
+  - name: sonar-scanner-cli
+    image: sonarsource/sonar-scanner-cli:12.2
+    command:
+    - sleep
+    args:
+    - infinity
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    command:
+    - sleep
+    args:
+    - infinity
+    volumeMounts:
+      - name: harbor-credentials
+        mountPath: /kaniko/.docker
+      - name: jenkins-artifacts
+        mountPath: /artifacts
+  - name: alpine
+    image: alpine:3.22
+    command:
+    - sleep
+    args:
+    - infinity
+    volumeMounts:
+      - name: jenkins-artifacts
+        mountPath: /artifacts
+  - name: crane
+    image: gcr.io/go-containerregistry/crane:debug
+    command:
+    - sleep
+    args:
+    - infinity
+    volumeMounts:
+      - name: harbor-credentials
+        mountPath: /root/.docker/config.json
+        subPath: config.json
+      - name: jenkins-artifacts
+        mountPath: /artifacts
+  - name: cosign
+    image: ghcr.io/sigstore/cosign/cosign:v2.6.5-dev
+    command:
+    - sleep
+    args:
+    - infinity
+    # same uid as jnlp: writes to its workspace
+    securityContext:
+      runAsUser: 1000
+    env:
+      - name: HOME
+        value: /tmp
+      - name: DOCKER_CONFIG
+        value: /docker
+      - name: COSIGN_PASSWORD
+        value: ""
+    volumeMounts:
+      - name: harbor-credentials
+        mountPath: /docker
+      - name: cosign-key
+        mountPath: /cosign
+      - name: jenkins-artifacts
+        mountPath: /artifacts
+  - name: helm
+    image: alpine/helm:4.3.1
+    command:
+    - sleep
+    args:
+    - infinity
+    volumeMounts:
+      - name: jenkins-artifacts
+        mountPath: /artifacts
+  volumes:
+    - name: harbor-credentials
+      secret:
+        secretName: harbor-dockerconfig
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+    - name: cosign-key
+      secret:
+        secretName: cosign-key
+    - name: jenkins-artifacts
+      persistentVolumeClaim:
+        claimName: jenkins-artifacts

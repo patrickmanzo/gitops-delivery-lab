@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack-application
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: monitoring-project
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "92.10.1"
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/values/kube-prometheus-stack/kube-prometheus-stack-values.yaml
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      path: secrets/monitoring
+    - repoURL: https://github.com/patrickmanzo/gitops-delivery-lab.git
+      targetRevision: main
+      path: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true

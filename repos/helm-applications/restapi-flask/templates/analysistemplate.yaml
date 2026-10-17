@@ -1,0 +1,35 @@
+# Without traffic (stg/prd have no k6) the queries return 0/NaN and the analysis passes
+{{- $env := .Values.environment | default "unknown" }}
+{{- $sel := printf "service=\"restapi-flask\", span_kind=\"SPAN_KIND_SERVER\", deployment_environment_name=\"%s\", service_version=\"{{args.version}}\"" $env }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  labels: {{ include "restapi-flask.labels" . | nindent 4 }}
+  name: {{ include "restapi-flask.fullname" . }}-canary
+spec:
+  args:
+    - name: version
+  metrics:
+    - name: error-rate
+      initialDelay: 60s
+      interval: 30s
+      count: 4
+      failureLimit: 1
+      successCondition: isNaN(result[0]) || result[0] <= {{ .Values.canary.maxErrorRate }}
+      provider:
+        prometheus:
+          address: {{ .Values.canary.prometheus }}
+          query: >-
+            (sum(rate(traces_spanmetrics_calls_total{ {{- $sel }}, http_response_status_code=~"5.."}[1m])) or vector(0))
+            / sum(rate(traces_spanmetrics_calls_total{ {{- $sel }}}[1m])) or vector(0)
+    - name: latency-p95
+      initialDelay: 60s
+      interval: 30s
+      count: 4
+      failureLimit: 1
+      successCondition: isNaN(result[0]) || result[0] <= {{ .Values.canary.maxLatencyP95 }}
+      provider:
+        prometheus:
+          address: {{ .Values.canary.prometheus }}
+          query: >-
+            histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{ {{- $sel }}}[1m]))) or vector(0)
